@@ -45,23 +45,23 @@ function updateButtons() {
 }
 
 // Load state on popup open
-chrome.runtime.sendMessage({ action: 'getState' }, (state) => {
-  if (state) syncState(state);
-});
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+  chrome.runtime.sendMessage({ action: 'getState' }, (state) => {
+    if (state) syncState(state);
+  });
 
-// Listen for state updates from background
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.action === 'stateUpdate') {
-    const wasRunning = isRunning;
-    const hadTime = remainingSeconds > 0;
-    syncState(message.state);
+  // Listen for state updates from background
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.action === 'stateUpdate') {
+      const hadTime = remainingSeconds > 0;
+      syncState(message.state);
 
-    // Play alarm when timer transitions to done
-    if (hadTime && message.state.remainingSeconds <= 0 && !message.state.isRunning) {
-      playAlarm();
+      if (hadTime && message.state.remainingSeconds <= 0 && !message.state.isRunning) {
+        playAlarm();
+      }
     }
-  }
-});
+  });
+}
 
 // --- Preset buttons ---
 document.querySelectorAll('.preset-btn').forEach(btn => {
@@ -172,6 +172,13 @@ function stopAnimation() {
   }
 }
 
+// --- Drawing constants ---
+const W = 240;
+const H = 400;
+const CX = W / 2;
+const GLASS_COLOR = 'rgba(200, 220, 255, 0.15)';
+const GLASS_BORDER = 'rgba(200, 220, 255, 0.4)';
+
 // --- Theme ---
 const themes = {
   gold:  { sand: '#f0c27f', sandDark: '#d4a054', sandRgb: '240, 194, 127' },
@@ -195,13 +202,6 @@ document.querySelectorAll('.theme-dot').forEach(dot => {
 });
 
 applyTheme(currentTheme);
-
-// --- Drawing ---
-const W = 240;
-const H = 400;
-const CX = W / 2;
-const GLASS_COLOR = 'rgba(200, 220, 255, 0.15)';
-const GLASS_BORDER = 'rgba(200, 220, 255, 0.4)';
 
 function drawHourglass() {
   ctx.clearRect(0, 0, W, H);
