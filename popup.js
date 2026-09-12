@@ -9,22 +9,69 @@ let totalSeconds = 5 * 60;
 let remainingSeconds = totalSeconds;
 let isRunning = false;
 let animationId = null;
-let timerInterval = null;
-
-// Sand particles for falling effect
 let particles = [];
+
+// --- Sync state from background ---
+function syncState(state) {
+  totalSeconds = state.totalSeconds;
+  remainingSeconds = state.remainingSeconds;
+  isRunning = state.isRunning;
+
+  updateDisplay();
+  updateButtons();
+
+  if (isRunning) {
+    startAnimation();
+  } else {
+    stopAnimation();
+    drawHourglass();
+  }
+
+  // Play alarm if timer just finished
+  if (remainingSeconds <= 0 && !isRunning) {
+    // Check if we should play sound (only on transition)
+  }
+}
+
+function updateButtons() {
+  startBtn.textContent = isRunning ? 'Pause' : 'Start';
+  startBtn.disabled = remainingSeconds <= 0 && !isRunning;
+
+  // Highlight active preset
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    const mins = parseInt(btn.dataset.minutes);
+    btn.classList.toggle('active', mins * 60 === totalSeconds);
+  });
+}
+
+// Load state on popup open
+chrome.runtime.sendMessage({ action: 'getState' }, (state) => {
+  if (state) syncState(state);
+});
+
+// Listen for state updates from background
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.action === 'stateUpdate') {
+    const wasRunning = isRunning;
+    const hadTime = remainingSeconds > 0;
+    syncState(message.state);
+
+    // Play alarm when timer transitions to done
+    if (hadTime && message.state.remainingSeconds <= 0 && !message.state.isRunning) {
+      playAlarm();
+    }
+  }
+});
 
 // --- Preset buttons ---
 document.querySelectorAll('.preset-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     if (isRunning) return;
-    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
     customMinInput.value = '';
-    totalSeconds = parseInt(btn.dataset.minutes) * 60;
-    remainingSeconds = totalSeconds;
-    updateDisplay();
-    drawHourglass();
+    const seconds = parseInt(btn.dataset.minutes) * 60;
+    chrome.runtime.sendMessage({ action: 'setDuration', seconds }, (state) => {
+      if (state) syncState(state);
+    });
   });
 });
 
@@ -32,50 +79,65 @@ customMinInput.addEventListener('change', () => {
   if (isRunning) return;
   const val = parseInt(customMinInput.value);
   if (val > 0 && val <= 120) {
-    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-    totalSeconds = val * 60;
-    remainingSeconds = totalSeconds;
-    updateDisplay();
-    drawHourglass();
+    chrome.runtime.sendMessage({ action: 'setDuration', seconds: val * 60 }, (state) => {
+      if (state) syncState(state);
+    });
   }
 });
 
 // --- Controls ---
 startBtn.addEventListener('click', () => {
-  if (isRunning) {
-    pause();
-  } else {
-    start();
-  }
+  const action = isRunning ? 'pause' : 'start';
+  chrome.runtime.sendMessage({ action }, (state) => {
+    if (state) syncState(state);
+  });
 });
 
-resetBtn.addEventListener('click', reset);
+resetBtn.addEventListener('click', () => {
+  chrome.runtime.sendMessage({ action: 'reset' }, (state) => {
+    if (state) syncState(state);
+    particles = [];
+  });
+});
 
-function start() {
-  if (remainingSeconds <= 0) return;
-  isRunning = true;
-  startBtn.textContent = 'Pause';
-  particles = [];
+// --- Polling to keep popup in sync while running ---
+let pollInterval = null;
 
-  timerInterval = setInterval(() => {
-    remainingSeconds--;
-    updateDisplay();
-    if (remainingSeconds <= 0) {
-      remainingSeconds = 0;
-      pause();
-      startBtn.textContent = 'Start';
-      startBtn.disabled = true;
-      playAlarm();
-      chrome.runtime.sendMessage({ action: 'timerDone' });
-    }
-  }, 1000);
+function startPolling() {
+  if (pollInterval) return;
+  pollInterval = setInterval(() => {
+    chrome.runtime.sendMessage({ action: 'getState' }, (state) => {
+      if (state) {
+        const hadTime = remainingSeconds > 0;
+        totalSeconds = state.totalSeconds;
+        remainingSeconds = state.remainingSeconds;
+        isRunning = state.isRunning;
+        updateDisplay();
+        updateButtons();
 
-  animate();
+        if (!isRunning) {
+          stopAnimation();
+          stopPolling();
+          drawHourglass();
+          if (hadTime && remainingSeconds <= 0) {
+            playAlarm();
+          }
+        }
+      }
+    });
+  }, 500);
+}
+
+function stopPolling() {
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
 }
 
 function playAlarm() {
   const audioCtx = new AudioContext();
-  const notes = [659, 784, 659, 784, 659]; // E5, G5 pattern
+  const notes = [659, 784, 659, 784, 659];
   notes.forEach((freq, i) => {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
@@ -90,27 +152,24 @@ function playAlarm() {
   });
 }
 
-function pause() {
-  isRunning = false;
-  startBtn.textContent = 'Start';
-  clearInterval(timerInterval);
-  cancelAnimationFrame(animationId);
-}
-
-function reset() {
-  pause();
-  remainingSeconds = totalSeconds;
-  startBtn.disabled = false;
-  startBtn.textContent = 'Start';
-  particles = [];
-  updateDisplay();
-  drawHourglass();
-}
-
 function updateDisplay() {
   const m = Math.floor(remainingSeconds / 60);
   const s = remainingSeconds % 60;
   timeDisplay.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+// --- Animation ---
+function startAnimation() {
+  if (animationId) return;
+  startPolling();
+  animate();
+}
+
+function stopAnimation() {
+  if (animationId) {
+    cancelAnimationFrame(animationId);
+    animationId = null;
+  }
 }
 
 // --- Drawing ---
@@ -163,7 +222,6 @@ function drawHourglass() {
   // Sand in upper half
   if (topSand > 0.01) {
     ctx.save();
-    // Clip to upper glass
     ctx.beginPath();
     ctx.moveTo(50, 28);
     ctx.bezierCurveTo(50, 140, 110, 175, CX, 200);
@@ -183,7 +241,6 @@ function drawHourglass() {
   // Sand in lower half
   if (bottomSand > 0.01) {
     ctx.save();
-    // Clip to lower glass
     ctx.beginPath();
     ctx.moveTo(50, 372);
     ctx.bezierCurveTo(50, 260, 110, 225, CX, 200);
@@ -212,7 +269,6 @@ function drawHourglass() {
     ctx.fillStyle = SAND_COLOR;
     ctx.fill();
 
-    // Particles
     spawnParticles();
     drawParticles();
   }
