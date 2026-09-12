@@ -172,17 +172,44 @@ function stopAnimation() {
   }
 }
 
+// --- Theme ---
+const themes = {
+  gold:  { sand: '#f0c27f', sandDark: '#d4a054', sandRgb: '240, 194, 127' },
+  blue:  { sand: '#00e5ff', sandDark: '#00b0d4', sandRgb: '0, 229, 255' },
+  green: { sand: '#39ff14', sandDark: '#2bc70e', sandRgb: '57, 255, 20' },
+};
+let currentTheme = localStorage.getItem('hourglassTheme') || 'gold';
+
+function applyTheme(name) {
+  currentTheme = name;
+  localStorage.setItem('hourglassTheme', name);
+  document.body.className = name === 'gold' ? '' : `theme-${name}`;
+  document.querySelectorAll('.theme-dot').forEach(d => {
+    d.classList.toggle('active', d.dataset.theme === name);
+  });
+  drawHourglass();
+}
+
+document.querySelectorAll('.theme-dot').forEach(dot => {
+  dot.addEventListener('click', () => applyTheme(dot.dataset.theme));
+});
+
+applyTheme(currentTheme);
+
 // --- Drawing ---
 const W = 240;
 const H = 400;
 const CX = W / 2;
-const SAND_COLOR = '#f0c27f';
-const SAND_DARK = '#d4a054';
 const GLASS_COLOR = 'rgba(200, 220, 255, 0.15)';
 const GLASS_BORDER = 'rgba(200, 220, 255, 0.4)';
 
 function drawHourglass() {
   ctx.clearRect(0, 0, W, H);
+
+  const t = themes[currentTheme];
+  const SAND_COLOR = t.sand;
+  const SAND_DARK = t.sandDark;
+  const SAND_RGB = t.sandRgb;
 
   const progress = totalSeconds > 0 ? remainingSeconds / totalSeconds : 1;
   const topSand = progress;
@@ -301,7 +328,7 @@ function drawParticles() {
 
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(240, 194, 127, ${p.life})`;
+    ctx.fillStyle = `rgba(${themes[currentTheme].sandRgb}, ${p.life})`;
     ctx.fill();
   }
 }
