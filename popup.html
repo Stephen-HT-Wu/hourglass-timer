@@ -72,6 +72,9 @@
       border: 2px solid rgba(255, 255, 255, 0.2);
       cursor: pointer;
       transition: all 0.2s;
+      padding: 0;
+      background: none;
+      appearance: none;
     }
 
     .theme-dot:hover {
@@ -81,6 +84,11 @@
     .theme-dot.active {
       border-color: #fff;
       box-shadow: 0 0 6px currentColor;
+    }
+
+    .theme-dot:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
     }
 
     .theme-dot.dot-gold { background: #f0c27f; color: #f0c27f; }
@@ -106,6 +114,16 @@
       color: var(--accent);
       margin-bottom: 20px;
       letter-spacing: 2px;
+      transition: opacity 0.3s;
+    }
+
+    @keyframes completePulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .time-display.complete {
+      animation: completePulse 1s ease-in-out 5;
     }
 
     .presets {
@@ -127,7 +145,7 @@
       transition: all 0.2s;
     }
 
-    .preset-btn:hover {
+    .preset-btn:hover:not(:disabled) {
       background: var(--accent-bg);
       border-color: var(--accent);
       color: var(--accent);
@@ -137,6 +155,16 @@
       background: var(--accent-bg-active);
       border-color: var(--accent);
       color: var(--accent);
+    }
+
+    .preset-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .preset-btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
     }
 
     .custom-input {
@@ -156,20 +184,29 @@
       font-size: 14px;
       text-align: center;
       outline: none;
+      transition: all 0.2s;
     }
 
-    .custom-input input:focus {
+    .custom-input input:focus-visible {
       border-color: var(--accent);
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .custom-input input:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
     }
 
     .custom-input label {
       font-size: 12px;
-      color: #999;
+      color: #b0b0b0;
     }
 
     .controls {
       display: flex;
       gap: 10px;
+      align-items: center;
     }
 
     .btn {
@@ -187,7 +224,7 @@
       color: #1a1a2e;
     }
 
-    .btn-start:hover {
+    .btn-start:hover:not(:disabled) {
       transform: scale(1.05);
       box-shadow: 0 4px 15px var(--accent-glow);
     }
@@ -198,7 +235,7 @@
       border: 1px solid rgba(255, 255, 255, 0.2);
     }
 
-    .btn-stop:hover {
+    .btn-stop:hover:not(:disabled) {
       background: rgba(255, 255, 255, 0.15);
     }
 
@@ -207,25 +244,65 @@
       cursor: not-allowed;
       transform: none;
     }
+
+    .btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .mute-btn {
+      width: 28px;
+      height: 28px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      color: #b0b0b0;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .mute-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #e0e0e0;
+    }
+
+    .mute-btn.muted {
+      color: #666;
+    }
+
+    .mute-btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
   </style>
 </head>
 <body>
   <div class="header">
     <h1>HOURGLASS TIMER</h1>
-    <div class="theme-switcher">
-      <div class="theme-dot dot-gold active" data-theme="gold"></div>
-      <div class="theme-dot dot-blue" data-theme="blue"></div>
-      <div class="theme-dot dot-green" data-theme="green"></div>
+    <div class="theme-switcher" role="group" aria-label="Color theme">
+      <button class="theme-dot dot-gold active" data-theme="gold"
+              aria-label="Gold theme" aria-pressed="true"></button>
+      <button class="theme-dot dot-blue" data-theme="blue"
+              aria-label="Blue theme" aria-pressed="false"></button>
+      <button class="theme-dot dot-green" data-theme="green"
+              aria-label="Green theme" aria-pressed="false"></button>
     </div>
   </div>
 
   <div class="hourglass-container">
-    <canvas id="hourglass" width="240" height="400"></canvas>
+    <canvas id="hourglass" width="240" height="400"
+            role="img" aria-label="Hourglass: full"></canvas>
   </div>
 
-  <div class="time-display" id="timeDisplay">00:00</div>
+  <div class="time-display" id="timeDisplay"
+       role="timer" aria-label="Time remaining" aria-live="off">00:00</div>
 
-  <div class="presets">
+  <div class="presets" role="group" aria-label="Preset durations">
     <button class="preset-btn" data-minutes="1">1 min</button>
     <button class="preset-btn" data-minutes="3">3 min</button>
     <button class="preset-btn active" data-minutes="5">5 min</button>
@@ -235,14 +312,20 @@
   </div>
 
   <div class="custom-input">
-    <label>Custom:</label>
-    <input type="number" id="customMin" min="1" max="120" placeholder="min">
-    <label>min</label>
+    <label for="customMin">Custom:</label>
+    <input type="number" id="customMin" min="1" max="120" placeholder="min"
+           aria-label="Custom duration in minutes">
+    <span aria-hidden="true">min</span>
   </div>
 
   <div class="controls">
     <button class="btn btn-start" id="startBtn">Start</button>
-    <button class="btn btn-stop" id="resetBtn">Reset</button>
+    <button class="btn btn-stop" id="resetBtn" disabled>Reset</button>
+    <button class="mute-btn" id="muteBtn" aria-label="Mute alarm sound" title="Mute alarm">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <path id="muteIcon" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+      </svg>
+    </button>
   </div>
 
   <script src="popup.js"></script>
