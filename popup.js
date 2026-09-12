@@ -65,11 +65,29 @@ function start() {
       pause();
       startBtn.textContent = 'Start';
       startBtn.disabled = true;
+      playAlarm();
       chrome.runtime.sendMessage({ action: 'timerDone' });
     }
   }, 1000);
 
   animate();
+}
+
+function playAlarm() {
+  const audioCtx = new AudioContext();
+  const notes = [659, 784, 659, 784, 659]; // E5, G5 pattern
+  notes.forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.3, audioCtx.currentTime + i * 0.25);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + i * 0.25 + 0.2);
+    osc.start(audioCtx.currentTime + i * 0.25);
+    osc.stop(audioCtx.currentTime + i * 0.25 + 0.2);
+  });
 }
 
 function pause() {
