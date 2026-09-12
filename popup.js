@@ -10,6 +10,7 @@ let remainingSeconds = totalSeconds;
 let isRunning = false;
 let animationId = null;
 let particles = [];
+let alarmPlayed = false;
 
 // --- Sync state from background ---
 function syncState(state) {
@@ -21,15 +22,11 @@ function syncState(state) {
   updateButtons();
 
   if (isRunning) {
+    alarmPlayed = false;
     startAnimation();
   } else {
     stopAnimation();
     drawHourglass();
-  }
-
-  // Play alarm if timer just finished
-  if (remainingSeconds <= 0 && !isRunning) {
-    // Check if we should play sound (only on transition)
   }
 }
 
@@ -37,7 +34,6 @@ function updateButtons() {
   startBtn.textContent = isRunning ? 'Pause' : 'Start';
   startBtn.disabled = remainingSeconds <= 0 && !isRunning;
 
-  // Highlight active preset
   document.querySelectorAll('.preset-btn').forEach(btn => {
     const mins = parseInt(btn.dataset.minutes);
     btn.classList.toggle('active', mins * 60 === totalSeconds);
@@ -50,13 +46,13 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessag
     if (state) syncState(state);
   });
 
-  // Listen for state updates from background
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'stateUpdate') {
       const hadTime = remainingSeconds > 0;
       syncState(message.state);
 
-      if (hadTime && message.state.remainingSeconds <= 0 && !message.state.isRunning) {
+      if (hadTime && message.state.remainingSeconds <= 0 && !message.state.isRunning && !alarmPlayed) {
+        alarmPlayed = true;
         playAlarm();
       }
     }
@@ -68,6 +64,7 @@ document.querySelectorAll('.preset-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     if (isRunning) return;
     customMinInput.value = '';
+    alarmPlayed = false;
     const seconds = parseInt(btn.dataset.minutes) * 60;
     chrome.runtime.sendMessage({ action: 'setDuration', seconds }, (state) => {
       if (state) syncState(state);
@@ -79,6 +76,7 @@ customMinInput.addEventListener('change', () => {
   if (isRunning) return;
   const val = parseInt(customMinInput.value);
   if (val > 0 && val <= 120) {
+    alarmPlayed = false;
     chrome.runtime.sendMessage({ action: 'setDuration', seconds: val * 60 }, (state) => {
       if (state) syncState(state);
     });
@@ -88,12 +86,14 @@ customMinInput.addEventListener('change', () => {
 // --- Controls ---
 startBtn.addEventListener('click', () => {
   const action = isRunning ? 'pause' : 'start';
+  alarmPlayed = false;
   chrome.runtime.sendMessage({ action }, (state) => {
     if (state) syncState(state);
   });
 });
 
 resetBtn.addEventListener('click', () => {
+  alarmPlayed = false;
   chrome.runtime.sendMessage({ action: 'reset' }, (state) => {
     if (state) syncState(state);
     particles = [];
@@ -119,7 +119,8 @@ function startPolling() {
           stopAnimation();
           stopPolling();
           drawHourglass();
-          if (hadTime && remainingSeconds <= 0) {
+          if (hadTime && remainingSeconds <= 0 && !alarmPlayed) {
+            alarmPlayed = true;
             playAlarm();
           }
         }
@@ -134,6 +135,12 @@ function stopPolling() {
     pollInterval = null;
   }
 }
+
+// Cleanup on popup close
+window.addEventListener('unload', () => {
+  stopPolling();
+  stopAnimation();
+});
 
 function playAlarm() {
   const audioCtx = new AudioContext();
@@ -150,6 +157,8 @@ function playAlarm() {
     osc.start(audioCtx.currentTime + i * 0.25);
     osc.stop(audioCtx.currentTime + i * 0.25 + 0.2);
   });
+  // Close AudioContext after playback to avoid resource leak
+  setTimeout(() => audioCtx.close(), notes.length * 250 + 300);
 }
 
 function updateDisplay() {
@@ -209,7 +218,6 @@ function drawHourglass() {
   const t = themes[currentTheme];
   const SAND_COLOR = t.sand;
   const SAND_DARK = t.sandDark;
-  const SAND_RGB = t.sandRgb;
 
   const progress = totalSeconds > 0 ? remainingSeconds / totalSeconds : 1;
   const topSand = progress;
